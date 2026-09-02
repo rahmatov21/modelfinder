@@ -96,6 +96,12 @@ def create_template_post(model: dict[str, Any], is_new: bool = False) -> str:
     if has_reasoning:
         lines.append("🧩 <b>Reasoning Support:</b> Yes (CoT / Thought tokens)")
 
+    # Market comparison snippet
+    from comparator import build_model_market_comparison_snippet
+    comp_snippet = build_model_market_comparison_snippet(model)
+    if comp_snippet:
+        lines.append(comp_snippet)
+
     lines.extend([
         "",
         "💰 <b>Pricing (per 1M tokens):</b>",
@@ -128,8 +134,9 @@ FORMATTING RULES:
    - Model ID in <code> tags
    - Key specifications: Context length, Modalities, Pricing (Input / Output per 1M tokens), Provider
    - Brief 1-2 sentence overview highlighting what makes this model special or unique
+   - Clear Comparison Note: 1 concise bullet showing how it compares to peer models (e.g. comparable tier to GPT-4o-mini / Claude / Llama, or price/speed advantage)
    - Direct OpenRouter Link: <a href="https://openrouter.ai/{model_id}">Open in OpenRouter</a>
    - Relevant hashtags at the bottom (e.g. #Provider #OpenRouter #AI)
-6. LENGTH REQUIREMENT: Keep the entire post concise (under 900 characters) so it fits as a Telegram photo caption.
+6. LENGTH REQUIREMENT: Keep the entire post concise (under 950 characters) so it fits as a Telegram photo caption.
 7. Do NOT include greetings, intro, or outro notes. Output ONLY the Telegram post content.
 """

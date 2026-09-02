@@ -231,6 +231,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• <b>Check Interval:</b> <code>{Config.CHECK_INTERVAL_MINUTES} min</code>\n\n"
         "🛠 <b>Available Commands:</b>\n"
         "• /categories - Browse by Category (🎥 Video, 🎙️ Voice, 🎨 Vision, 💻 Code, 🆓 Free)\n"
+        "• /compare <code>[model1] [model2]</code> - Compare models head-to-head with benchmarks & pricing\n"
         "• /search <code>&lt;query&gt;</code> - Search models or keywords\n"
         "• /latest - Show recent additions\n"
         "• /check - Trigger a check for new models now\n"
@@ -404,9 +405,111 @@ async def cmd_model(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [
             InlineKeyboardButton("✨ Generate AI Post", callback_data=f"genpost:{model_id}"),
             InlineKeyboardButton("📄 Use Template As-Is", callback_data=f"gentmpl:{model_id}"),
-        ]
+        ],
+        [
+            InlineKeyboardButton("⚖️ Compare with Rival Models", callback_data=f"cmp_menu:{model_id}"),
+        ],
     ]
     await status_msg.edit_text(preview, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+@admin_only
+async def cmd_compare(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Compare two AI models side-by-side with benchmarks, pricing, and context."""
+    if not context.args:
+        # Show popular comparisons menu
+        text = (
+            "⚖️ <b>AI Model Comparison Battle</b>\n\n"
+            "Compare any two models on OpenRouter side-by-side (Pricing, Context, Modalities & Benchmarks).\n\n"
+            "<b>Usage:</b>\n"
+            "• <code>/compare &lt;model_1&gt; &lt;model_2&gt;</code>\n"
+            "• Example: <code>/compare deepseek/deepseek-chat openai/gpt-4o-mini</code>\n\n"
+            "<b>Popular Matchups:</b>"
+        )
+        keyboard = [
+            [
+                InlineKeyboardButton("🔥 DeepSeek V3 vs GPT-4o-mini", callback_data="cmp:deepseek/deepseek-chat:openai/gpt-4o-mini"),
+            ],
+            [
+                InlineKeyboardButton("🔥 Claude 3.5 Sonnet vs GPT-4o", callback_data="cmp:anthropic/claude-3.5-sonnet:openai/gpt-4o"),
+            ],
+            [
+                InlineKeyboardButton("🔥 Llama 3.3 70B vs Qwen 2.5 72B", callback_data="cmp:meta-llama/llama-3.3-70b-instruct:qwen/qwen-2.5-72b-instruct"),
+            ],
+            [
+                InlineKeyboardButton("🔥 Gemini 2.5 Flash vs GPT-4o-mini", callback_data="cmp:google/gemini-2.5-flash:openai/gpt-4o-mini"),
+            ],
+        ]
+        await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(keyboard))
+        return
+
+    from comparator import generate_comparison_post
+
+    if len(context.args) == 1:
+        # Only 1 model specified: suggest benchmark peers!
+        m_query = context.args[0].strip()
+        status_msg = await update.message.reply_text(f"🔍 Finding comparison candidates for <code>{m_query}</code>...", parse_mode=ParseMode.HTML)
+        model = await or_client.get_model_by_id(m_query)
+        if not model:
+            search_results = await or_client.search_models(m_query)
+            if search_results:
+                model = search_results[0]
+            else:
+                await status_msg.edit_text(f"❌ Model <code>{m_query}</code> not found.", parse_mode=ParseMode.HTML)
+                return
+
+        m_id = model.get("id")
+        m_name = model.get("name", m_id)
+
+        keyboard = [
+            [InlineKeyboardButton("⚖️ vs GPT-4o-mini", callback_data=f"cmp:{m_id}:openai/gpt-4o-mini")],
+            [InlineKeyboardButton("⚖️ vs Llama 3.3 70B", callback_data=f"cmp:{m_id}:meta-llama/llama-3.3-70b-instruct")],
+            [InlineKeyboardButton("⚖️ vs DeepSeek V3", callback_data=f"cmp:{m_id}:deepseek/deepseek-chat")],
+            [InlineKeyboardButton("⚖️ vs Claude 3.5 Sonnet", callback_data=f"cmp:{m_id}:anthropic/claude-3.5-sonnet")],
+        ]
+        text = (
+            f"⚖️ Compare <b>{m_name}</b> (<code>{m_id}</code>) with:\n\n"
+            "Select a benchmark rival to view the head-to-head comparison:"
+        )
+        await status_msg.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(keyboard))
+        return
+
+    # Two models specified:
+    m1_query = context.args[0].strip()
+    m2_query = context.args[1].strip()
+    status_msg = await update.message.reply_text("⚖️ Generating comparison breakdown...", parse_mode=ParseMode.HTML)
+
+    model_a = await or_client.get_model_by_id(m1_query)
+    if not model_a:
+        res_a = await or_client.search_models(m1_query)
+        model_a = res_a[0] if res_a else None
+
+    model_b = await or_client.get_model_by_id(m2_query)
+    if not model_b:
+        res_b = await or_client.search_models(m2_query)
+        model_b = res_b[0] if res_b else None
+
+    if not model_a:
+        await status_msg.edit_text(f"❌ Model 1 <code>{m1_query}</code> not found.", parse_mode=ParseMode.HTML)
+        return
+    if not model_b:
+        await status_msg.edit_text(f"❌ Model 2 <code>{m2_query}</code> not found.", parse_mode=ParseMode.HTML)
+        return
+
+    comp_text = generate_comparison_post(model_a, model_b)
+    draft_id = str(uuid.uuid4())[:8]
+    await db.save_draft(draft_id, f"{model_a['id']}_vs_{model_b['id']}", comp_text)
+
+    keyboard = [
+        [
+            InlineKeyboardButton("🚀 Publish to Channel", callback_data=f"pub:{draft_id}"),
+            InlineKeyboardButton("🔄 Swap Models", callback_data=f"cmp:{model_b['id']}:{model_a['id']}"),
+        ],
+        [
+            InlineKeyboardButton("🗑️ Discard", callback_data=f"del:{draft_id}"),
+        ],
+    ]
+    await status_msg.edit_text(comp_text, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(keyboard), disable_web_page_preview=True)
 
 
 @admin_only
@@ -547,6 +650,50 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
         return
 
+    # Comparison menu: cmp_menu:<model_id>
+    if data.startswith("cmp_menu:"):
+        model_id = data[9:]
+        model = await or_client.get_model_by_id(model_id)
+        name = model.get("name", model_id) if model else model_id
+        keyboard = [
+            [InlineKeyboardButton("⚖️ vs GPT-4o-mini", callback_data=f"cmp:{model_id}:openai/gpt-4o-mini")],
+            [InlineKeyboardButton("⚖️ vs Llama 3.3 70B", callback_data=f"cmp:{model_id}:meta-llama/llama-3.3-70b-instruct")],
+            [InlineKeyboardButton("⚖️ vs DeepSeek V3", callback_data=f"cmp:{model_id}:deepseek/deepseek-chat")],
+            [InlineKeyboardButton("⚖️ vs Claude 3.5 Sonnet", callback_data=f"cmp:{model_id}:anthropic/claude-3.5-sonnet")],
+            [InlineKeyboardButton("🔙 Back to Model", callback_data=f"minfo:{model_id}")],
+        ]
+        text = f"⚖️ <b>Compare {name}</b> with a top rival:\n\nSelect a benchmark model to compare head-to-head:"
+        await query.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(keyboard))
+        return
+
+    # Execute Comparison: cmp:<id_a>:<id_b>
+    if data.startswith("cmp:"):
+        parts = data.split(":")
+        id_a = parts[1]
+        id_b = parts[2]
+        status_msg = await query.message.reply_text(f"⚖️ Generating comparison: <code>{id_a}</code> vs <code>{id_b}</code>...", parse_mode=ParseMode.HTML)
+        model_a = await or_client.get_model_by_id(id_a)
+        model_b = await or_client.get_model_by_id(id_b)
+        if not model_a or not model_b:
+            await status_msg.edit_text("❌ One or both models not found for comparison.")
+            return
+
+        from comparator import generate_comparison_post
+        comp_text = generate_comparison_post(model_a, model_b)
+        draft_id = str(uuid.uuid4())[:8]
+        await db.save_draft(draft_id, f"{id_a}_vs_{id_b}", comp_text)
+        keyboard = [
+            [
+                InlineKeyboardButton("🚀 Publish to Channel", callback_data=f"pub:{draft_id}"),
+                InlineKeyboardButton("🔄 Swap Models", callback_data=f"cmp:{id_b}:{id_a}"),
+            ],
+            [
+                InlineKeyboardButton("🗑️ Discard", callback_data=f"del:{draft_id}"),
+            ],
+        ]
+        await status_msg.edit_text(comp_text, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(keyboard), disable_web_page_preview=True)
+        return
+
     # Details inspection: minfo:<model_id>
     if data.startswith("minfo:"):
         model_id = data[6:]
@@ -559,7 +706,10 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             [
                 InlineKeyboardButton("✨ Generate AI Post", callback_data=f"genpost:{model_id}"),
                 InlineKeyboardButton("📄 Use Template As-Is", callback_data=f"gentmpl:{model_id}"),
-            ]
+            ],
+            [
+                InlineKeyboardButton("⚖️ Compare with Rival Models", callback_data=f"cmp_menu:{model_id}"),
+            ],
         ]
         await query.message.reply_text(preview, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(keyboard))
         return
@@ -966,6 +1116,7 @@ def main():
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("category", cmd_category))
     app.add_handler(CommandHandler("categories", cmd_category))
+    app.add_handler(CommandHandler("compare", cmd_compare))
     app.add_handler(CommandHandler("check", cmd_check))
     app.add_handler(CommandHandler("search", cmd_search))
     app.add_handler(CommandHandler("latest", cmd_latest))

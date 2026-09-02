@@ -103,6 +103,7 @@ You will see:
 | :--- | :--- |
 | `/start` or `/help` | View bot overview, tracking status, category menu, and command list |
 | `/categories` or `/category` | Browse models by category (🎥 Video, 🎙️ Voice & Audio, 🎨 Vision, 🧩 Reasoning, 💻 Code, 🆓 Free) |
+| `/compare [m1] [m2]` | Head-to-head model comparison battle (Cost ratio, context, and Artificial Analysis benchmarks) |
 | `/category <name>` | Directly view models in a category (e.g. `/category video` or `/category voice`) |
 | `/search <query>` | Search models by name, ID, or keywords (e.g. `/search llama-3.3`) |
 | `/latest [n]` | View the latest discovered models from OpenRouter |

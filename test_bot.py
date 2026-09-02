@@ -182,12 +182,56 @@ async def test_categories():
     print("✅ Category filtering tests passed!")
 
 
+async def test_comparator():
+    print("Testing model comparisons and benchmark snippets...")
+    from comparator import make_mini_bar, format_pricing_advantage, generate_comparison_post, build_model_market_comparison_snippet
+
+    bar = make_mini_bar(75.5, 100, 8)
+    assert "█" in bar
+    assert "75.5" in bar
+
+    # Pricing advantage
+    adv = format_pricing_advantage(0.15, 0.60, "Model A", "Model B")
+    assert "cheaper" in adv
+    assert "Model A" in adv
+
+    model_1 = {
+        "id": "openai/gpt-4o-mini",
+        "name": "GPT-4o-mini",
+        "context_length": 128000,
+        "pricing": {"prompt": "0.00000015", "completion": "0.0000006"},
+        "architecture": {"input_modalities": ["text"], "output_modalities": ["text"]},
+        "benchmarks": {"artificial_analysis": {"intelligence_index": 72.0, "coding_index": 75.0}}
+    }
+
+    model_2 = {
+        "id": "meta-llama/llama-3.3-70b-instruct",
+        "name": "Llama 3.3 70B",
+        "context_length": 131072,
+        "pricing": {"prompt": "0.0000007", "completion": "0.0000007"},
+        "architecture": {"input_modalities": ["text"], "output_modalities": ["text"]},
+        "benchmarks": {"artificial_analysis": {"intelligence_index": 68.0, "coding_index": 74.0}}
+    }
+
+    comp_post = generate_comparison_post(model_1, model_2)
+    assert "GPT-4o-mini vs Llama 3.3 70B" in comp_post
+    assert "Head-to-Head Analysis" in comp_post
+    assert "Benchmark Scores" in comp_post
+
+    snippet = build_model_market_comparison_snippet(model_1)
+    assert "Market Tier:" in snippet
+    assert "GPT-4o-mini" in snippet
+
+    print("✅ Comparator tests passed!")
+
+
 async def main():
     await test_formatter()
     await test_logos()
     await test_database()
     await test_openrouter_search()
     await test_categories()
+    await test_comparator()
     print("\n🎉 ALL TESTS PASSED SUCCESSFULLY!")
 
 
